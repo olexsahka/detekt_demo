@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>reveal.js</title>
+
+		<link rel="stylesheet" href="dist/reset.css">
+		<link rel="stylesheet" href="dist/reveal.css">
+		<link rel="stylesheet" href="dist/theme/black.css">
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="plugin/highlight/monokai.css">
+
+		<style>
+			/* General Styles */
+			.reveal .slides section {
+				padding: 20px;
+				display: grid;
+				grid-template-rows: auto 1fr;
+				align-items: start;
+				height: 100vh;
+			}
+
+			/* Title Styling */
+			.reveal .slides section h2, .reveal .slides section h3 {
+				font-family: 'Arial', sans-serif;
+				font-weight: bold;
+				text-transform: uppercase;
+				color: #fff;
+				text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+				margin-bottom: 15px;
+			}
+
+			/* Section Header for Main Titles */
+			.reveal .slides section h2 {
+				font-size: 2.5rem; /* Larger title font size */
+				border-bottom: 2px solid #fff;
+				padding-bottom: 10px;
+			}
+
+			/* Smaller Section Headers for Subtitles */
+			.reveal .slides section h3 {
+				font-size: 2rem;
+				color: #fff;
+			}
+
+			/* Slide Content */
+			.reveal .slides section p, .reveal .slides section ul {
+				font-size: 1.2rem;
+				color: #fff;
+				line-height: 1.5;
+			}
+
+			/* Code Style */
+			#first-launch pre code {
+				font-size: 1rem;
+				line-height: 1.4;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+			}
+
+			/* Specific Slide Layouts */
+			#first-launch {
+				display: grid;
+				grid-template-rows: auto 1fr;
+				align-items: start;
+				height: 100vh;
+			}
+			
+			#code-slide pre code {
+				font-size: 0.8rem; /* Smaller code font for readability */
+				max-height: 100vh;
+				line-height: 1.2;
+			}
+
+			/* General Image Styling */
+			.reveal .slides section img {
+				max-width: 100%;
+				border-radius: 8px;
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+					<h2>Катим Detekt в проект</h2>
+					<img src="assets/mem.png" alt="Беспорядок в коде">
+					<p>Directed by Sutugin Alexander</p>
+				</section>
+
+				<section>
+					<h3>Зачем нужны статические анализаторы кода?</h3>
+					<p>Чтобы код не выглядел так:</p>
+					<img src="assets/bad_code.png" alt="Беспорядок в коде">
+				</section>
+
+				<section>
+					<h2>Выбор Linter-a</h2>
+					<img src="assets/1706896983254.png" alt="Сравнение линтеров">
+				</section>
+
+				<section id="first-launch">
+					<h2>Первый запуск</h2>
+					<pre>
+						<code data-trim data-noescape>
+							# Включаем Detekt в Gradle
+							plugins {
+								id "io.gitlab.arturbosch.detekt" version "1.23.0"
+							}
+							
+							detekt {
+								config = files("detekt.yml")
+							}
+						</code>
+					</pre>
+				</section>
+
+				<section>
+					<h2>Первая проверка</h2>
+					<p> А потом Detekt сказал ...</p>
+					<img id ="first_detekt" src="assets/conflicts_detekt.png" alt="Ошибка Detekt" height="60%" >
+					<p> И это лишь 1/40 того что он выдал ...</p>
+
+				</section>
+
+				<section>
+					<h2>Подключаем Detekt</h2>
+					<img src="assets/base_settings.png" alt="Ошибка Detekt">
+				</section>
+
+				<section>
+					<h2>Создаем кастомные правила. Provider</h2>
+					<img src="assets/provider.png" alt="Ошибка Detekt">
+				</section>
+
+				<section>
+					<h2>Создаем кастомные правила. Rule</h2>
+					<div style="display: flex; justify-content: space-between; gap: 20px;">
+						<pre style="width: 38%; font-size: 0.3em;">
+							<code>
+class TrailingCommaRule(config: Config = Config.empty) : Rule(config) {
+
+	override val issue = Issue(
+		id = this.javaClass.simpleName,
+		severity = Severity.Style,
+		description = "Checks for correct trailing comma usage.",
+		debt = Debt.FIVE_MINS
+	)
+
+	override fun visitKtFile(file: KtFile) {
+		super.visitKtFile(file)
+		file.accept(TrailingCommaVisitor(this))
+	}
+}
+							</code>
+						</pre>
+						<pre style="width: 60%; font-size: 0.3em;">
+							<code>
+class TrailingCommaVisitor(private val rule: Rule) : KtVisitorVoid() {
+
+	override fun visitValueArgumentList(list: KtValueArgumentList) {
+		checkTrailingComma(list)
+		super.visitValueArgumentList(list)
+	}
+
+	override fun visitParameterList(list: KtParameterList) {
+		checkTrailingComma(list)
+		super.visitParameterList(list)
+	}
+
+	override fun visitCollectionLiteralExpression(expression: KtCollectionLiteralExpression) {
+		checkTrailingComma(expression)
+		super.visitCollectionLiteralExpression(expression)
+	}
+
+	private fun checkTrailingComma(element: PsiElement) {
+        val lastChild = element.lastChildIgnoringWhitespaceAndComments
+        val hasTrailingComma = lastChild?.node?.elementType == KtTokens.COMMA
+
+        val shouldHaveTrailingComma = when (element) {
+            is KtValueArgumentList -> element.arguments.size > 1
+            is KtParameterList -> element.parameters.size > 1
+            is KtCollectionLiteralExpression -> element.getInnerExpressions().size > 1
+            is KtEnumEntry -> true
+            else -> false
+        }
+
+        if (shouldHaveTrailingComma && !hasTrailingComma) {
+            rule.report(
+                CorrectableCodeSmell(
+                    rule.issue,
+                    Entity.from(element),
+                    "Missing trailing comma",
+                    autoCorrect = true
+                ) {
+                    val psiFactory = KtPsiFactory(element.project)
+                    val comma = psiFactory.createComma()
+                    element.add(comma)
+                }
+            )
+        } else if (!shouldHaveTrailingComma && hasTrailingComma) {
+            rule.report(
+                CorrectableCodeSmell(
+                    rule.issue,
+                    Entity.from(lastChild!!),
+                    "Unnecessary trailing comma",
+                    autoCorrect = true
+                ) {
+                    lastChild.delete()
+                }
+            )
+        }
+    }
+}
+							</code>
+						</pre>
+					</div>
+				</section>
+
+				<section>
+					<h2>Создаем кастомные правила. Конфигурация</h2>
+					<div style="display: flex; align-items: center; gap: 20px;">
+						<div style="text-align: center;">
+							<img src="assets/local_config.png" alt="Ошибка Detekt" width="130%" >
+							<p>local config</p>
+						</div>
+						<div style="text-align: center;">
+							<img src="assets/global_config.png" alt="Ошибка Detekt" width="70%">
+							<p>global config</p>
+						</div>
+					</div>
+					<div style="text-align: center; margin-top: 20px;">
+						<img src="assets/rule_set_provider_link.png" alt="Ошибка Detekt" width="80%">
+						<p>io.gitlab.arturbosch.detekt.api.RuleSetProvider</p>
+					</div>
+				</section>
+				
+
+				<section>
+					<h2>Создаем кастомные правила. Структура</h2>
+					<img src="assets/custom_rules_structure.png" alt="Ошибка Detekt">
+				</section>
+
+				<section>
+					<h2>Лезем под капот</h2>
+					<pre>
+						<code>
+try {
+	riskyOperation()
+} catch (e: Exception) { }
+						</code>
+					</pre>
+				</section>
+
+				<section>
+					<h2>Лезем под капот. PSI дерево</h2>
+					<pre>
+						<code>
+KtTryExpression (try { riskyOperation() } catch (e: Exception) { })
+├── KtBlockExpression ({ riskyOperation() })
+│   └── KtCallExpression (riskyOperation())
+│       ├── KtNameReferenceExpression (riskyOperation)
+├── KtCatchClause (catch (e: Exception) { })
+│   ├── KtParameter (e: Exception)
+│   │   ├── KtNameReferenceExpression (Exception)
+│   ├── KtBlockExpression ({ })
+
+						</code>
+					</pre>
+				</section>
+
+				<section>
+					<h2>Лезем под капот. Обход по правилам</h2>
+					<pre>
+						<code>
+class EmptyCatchBlock(config: Config) : Rule(config) {
+	override fun visitTryExpression(expression: KtTryExpression) {
+		expression.catchClauses.forEach { catchClause ->
+			val catchBody = catchClause.catchBody
+			if (catchBody?.children?.isEmpty() == true) {
+				report(
+					CodeSmell(
+						issue,
+						Entity.from(catchClause),
+						"Пустой блок catch"
+					)
+				)
+			}
+		}
+	}
+}
+						</code>
+					</pre>
+				</section>
+				
+
+				<section>
+					<h2>Работа с прехуками</h2>
+					<img src="assets/prepush.png" alt="Ошибка Detekt">
+				</section>
+
+				<section>
+					<h2>detekt gradle plugin</h2>
+					<img id="toggleImage" src="assets/download_ui_plugin.png" onclick="toggleImage()" maxHeight ="60%">
+				</section>
+				<script>
+					function toggleImage() {
+						let img = document.getElementById("toggleImage");
+						img.src = img.src.includes("download_ui_plugin.png") 
+							? "assets/detekt_plugin.png" 
+							: "assets/download_ui_plugin.png";
+					}
+				</script>
+				<section id="code-slide">
+					<h2>Соеденяем бейзлайны</h2>
+					<pre>
+						<code data-trim data-noescape>
+						task generateDetektBaseline {
+							doLast {
+								val baselineFile: File = file("$rootDir/config/detekt/detekt-baseline.xml")
+								if (baselineFile.exists()) {
+									baselineFile.delete()
+								}
+								baselineFile < < "<SmellBaseline>\n"
+								subprojects.forEach { project -> 
+									def projectBaselineFile : File = file ("$(project.projectDir]/detekt-baseline.xml")
+									if (projectBaselineFile.exists()) {
+										def lines : List < String > = projectBaselineFile.readLines()
+										def content : List < String > = lines.subList(2, lines.size() - 1)
+										baselineFile < < content . join ("\n") + "\n"
+									}
+								}
+								baselineFile < < "</SmellBaseline>\n"
+								println("Coздан oбщий Baseline файл для Detekt plugin")
+							}
+						}	
+						</code>
+					</pre>
+				</section>
+
+				<section style="color: #fff; font-family: Arial, sans-serif; text-align: left; max-width: 800px; margin: auto;">
+					<h2 style="border-bottom: 2px solid #555; padding-bottom: 10px;">Проблемы</h2>
+					<p style="font-weight: bold;">Можно отключить прехуки</p>
+					<p style="margin-left: 30px;">Решение: Поставить доп проверку на этапе сборки на Jenkins-е</p>
+					<p style="font-weight: bold;">С увеличением кодовой базы, увеличиваются бейзлайны</p>
+					<p style="margin-left: 30px;">Решение: Исключать слишком жестокие правила</p>
+				</section>
+				
+
+				<section>
+					<h2>Интегрируем в CI</h2>
+					<p>Решение: Расширяем пайплайн, добавлением Detekt-a</p>
+				</section>
+
+				<section>
+					<h2 style="text-align: center;">Выводы</h2>
+					<ul style="list-style: none; padding-left: 0; font-size: 1em; text-align: left;">
+						<li>✅ Код стал чище</li>
+						<li>⚠️ Линтер ругается, но это полезно</li>
+						<li>😩 Команда страдает, но привыкает</li>
+						<li>👍 На ревью никто не разносит за код-стайл</li>
+					</ul>
+				</section>
+
+				
+
+				<section>
+					<h2>Вопросы?</h2>
+					<img src="assets/questions.jpg" alt="Конец презентации">
+				</section>
+			</div>
+		</div>
+
+		<script src="dist/reveal.js"></script>
+		<script src="plugin/notes/notes.js"></script>
+		<script src="plugin/markdown/markdown.js"></script>
+		<script src="plugin/highlight/highlight.js"></script>
+		<script>
+			Reveal.initialize({
+				hash: true,
+				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+			});
+		</script>
+	</body>
+</html>
